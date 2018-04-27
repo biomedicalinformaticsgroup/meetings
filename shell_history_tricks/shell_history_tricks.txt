@@ -1,0 +1,21 @@
+Reuse all parameters from a previous command:
+> ll HA1.html raw_reads.html
+> wc !:1-$  (= "wc HA1.html raw_reads.html")
+OR 
+> wc !*
+
+# Command options count as parameters, so use parameter subsets to avoid them:
+> ls -lt HA1.html raw_reads.html
+> wc !:2-$ (= "wc HA1.html raw_reads.html")
+OR 
+> wc !:2-3
+
+# Access just the directory part of a previous parameter:
+> ls /srv/data/130429_0040_H0HV1ADXX_1_IL-TP-001_1.sanfastq.gz
+> cd !:$:h (= "cd /srv/data/")
+OR 
+> cd !$:h
+
+# Substitution within parameters:
+> ll HA1.html raw_reads.html
+> touch !*:gs/html/txt/ (= "touch HA1.txt raw_reads.txt")
