@@ -1,0 +1,113 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r}
+library(parallel)
+library(purrr)
+```
+
+- Two type of parallel implementation, Folk and Socket
+```{r}
+system.time(ret <- lapply(1:4, function(i){
+  Sys.sleep(1)
+})
+)
+
+## Folk
+system.time(ret <- mclapply(1:4, function(i){
+  Sys.sleep(1)
+  },mc.cores =4)
+)
+
+## Socket
+system.time(ret <- parLapply(cl=makeCluster(4) ,X = 1:4, fun = function(i){
+  Sys.sleep(1)
+  })
+)
+```
+
+
+
+- The dbconn object is created when org.Mm.eg.db is loaded to the namespace, so all calls to org.Mm.eg_dbconn() will return
+the same instance of the connection. When the query from multiple cores connect to the db at the same exact moment using this
+same dbconnection object, the query will fail.
+```{r}
+library(topGO,quietly = TRUE,warn.conflicts = F)
+library(org.Mm.eg.db,quietly = TRUE,warn.conflicts = F)
+mclapply(c(1:90),function(x){
+  a<-DBI::dbGetQuery(org.Mm.eg_dbconn(),"SELECT DISTINCT ensembl_id, go_id FROM ensembl INNER JOIN go_cc USING(_id)")
+  1
+},mc.cores = 90)
+```
+
+
+- The Socket method can solve this problem.
+```{r}
+parLapply(cl=makeCluster(90), X = c(1:90),function(x){
+  #Because in socket method, each worker node is a freash R session, thus if a package is needs, it needs to be loaded in the worker node.
+  library(topGO,quietly = TRUE,warn.conflicts = F)
+  library(org.Mm.eg.db,quietly = TRUE,warn.conflicts = F)
+  a<-DBI::dbGetQuery(org.Mm.eg_dbconn(),"SELECT DISTINCT ensembl_id, go_id FROM ensembl INNER JOIN go_cc USING(_id)")
+  1
+})
+```
+
+- you can also export variable into worker nodes
+```{r,error=TRUE}
+host_variable='host_variable'
+cl <- makeCluster(4)
+clusterEvalQ(cl, {host_variable})
+
+clusterExport(cl=cl,varlist = c('host_variable'),envir = .GlobalEnv)
+clusterEvalQ(cl, {host_variable})
+stopCluster(cl)
+```
+
+
+- caution: when using socket mode, the R session in the worker node will presist, so when a new job start in an existing worker node,
+it is not starting from a freash session, but start from the finishing state of the last job of the woker node.
+```{r}
+## mcapply will pick up global env from the host
+aaa=TRUE
+c(1:4) %>% mclapply(mc.cores=4,X=.,function(x){
+  if(exists('aaa')) return('aaa exist in env')
+  assign('aaa',x,.GlobalEnv)
+})
+
+## socket methods will create a new env for each work
+c(1:4) %>% parLapply(cl=makeCluster(4), X=.,function(x){
+  if(exists('aaa')) return('reused!!!')
+  assign('aaa',x,.GlobalEnv)
+})
+
+## socket methods will re-use workers for new jobs
+c(1:4) %>% parLapply(cl=makeCluster(1), X=.,function(x){
+  if(exists('aaa')) return('reused!!!')
+  assign('aaa',x,.GlobalEnv)
+})
+
+```
+
+- Thus if something (data table, variable, ect) is shared by multiple jobs, it should not be change within any worker env.
+```{r}
+iamtrue=TRUE
+cl=makeCluster(1)
+clusterExport(cl=cl,varlist = c('iamtrue'),envir = .GlobalEnv)
+c(1:4) %>% parLapply(cl=cl, X=.,function(x){
+  ret=ifelse(iamtrue, TRUE,FALSE)
+  assign('iamtrue',value = FALSE,envir = .GlobalEnv)
+  return(ret)
+})
+```
+
+
+
+- R connection limit
+```{r}
+# help("connections", package="base")
+# A maximum of 128 connections can be allocated (not necessarily open) at any one time.
+# Three of these are pre-allocated (see stdout).
+# The OS will impose limits on the numbers of connections of various types, but these are usually larger than 125.
+```
