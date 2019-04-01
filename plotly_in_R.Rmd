@@ -1,0 +1,174 @@
+---
+title: 'Plotly for R'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+```
+<br>
+[Plotly](https://plot.ly/) is a technical computing company headquartered in Montreal, Quebec, that develops online data analytics and visualization tools. Plotly provides online graphing, analytics, and statistics tools, as well as scientific graphing libraries for Python, [R](https://plot.ly/d3-js-for-r-and-shiny-charts/), MATLAB, Perl, Julia, Arduino, and REST.
+<br>
+
+## Gapminder
+
+Unveiling the beauty of statistics for a fact based world view [gapminder.org](https://www.gapminder.org/)
+
+<iframe width='560' height='315' src='https://www.youtube.com/embed/Sm5xF-UYgdg' frameborder='0' allow='accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe>
+
+<br>
+**gapminder** package in R has dataframe with 1704 observations of 142 countries with measurements from 1952 to 2007:
+```{r results='asis'}
+library(gapminder)
+kable(head(gapminder), caption='Gapminder data frame')
+```
+
+## Basic plots
+
+```{r results='hide', message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+```
+<br>
+Plot GPD per capita vs Life Expectancy for all countries, coloured by Continent
+```{r message=FALSE}
+gapminder %>% ggplot(aes(x=gdpPercap, y=lifeExp, color=continent)) + geom_point() + scale_x_log10()
+```
+<br>
+
+Summarise the information of each country with the mean of each variable
+```{r message=FALSE}
+gapminder_aggr = gapminder %>% group_by(country, continent) %>% 
+                 summarise(lifeExp = mean(lifeExp), 
+                           pop = mean(pop), 
+                           gdpPercap = mean(gdpPercap))
+
+gapminder_aggr %>% ggplot(aes(x=gdpPercap, y=lifeExp, color=continent)) + geom_point() + scale_x_log10()
+```
+<br>
+
+Include population info and add format
+```{r}
+gapminder_aggr %>% ggplot(aes(x=gdpPercap, y=lifeExp, color=continent)) + geom_point(aes(size=pop)) +
+                   scale_x_log10() + theme_minimal() + theme(plot.title = element_text(hjust=.5)) + 
+                   ggtitle('Mean GDP per capita and life expectancy per country') + 
+                   xlab('GDP per Capita') + ylab('Life Expectancy')
+```
+<br>
+
+## Using Plotly
+
+<br>
+There are two ways of creating a Plotly plot:
+
+* `ggplotly`: Transforms a `ggplot` object into a plotly object
+<br>
+* `plot_ly`: Transforms data directly into a plotly object
+<br><br>
+
+```{r results='hide', message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(plotly))
+```
+<br>
+
+#### 1. Using `ggplotly`
+
+Save ggplot plot in an variable
+```{r message=FALSE}
+aggr_plot = gapminder_aggr %>% ggplot(aes(x=gdpPercap, y=lifeExp, color=continent)) +
+            geom_point(aes(size=pop)) + scale_x_log10() + theme_minimal() + 
+            theme(plot.title = element_text(hjust=.5)) + 
+            ggtitle('Mean GDP per capita and life expectancy per country') + 
+            xlab('GDP per Capita') + ylab('Life Expectancy')
+```
+
+Wrap instance in `ggplotly` function to add Plotly functionalities
+```{r message=FALSE}
+ggplotly(aggr_plot)
+```
+<br>
+
+#### 2. Using `plot_ly`
+
+Define plot using `plot_ly` instead of `ggplot` function
+```{r warning=FALSE, message=FALSE}
+gg_pal = function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+gapminder_aggr %>% plot_ly(x=~gdpPercap, y=~lifeExp, size=~pop, color=~continent, colors=gg_pal(5)) %>% 
+                   layout(title = 'Mean GDP per capita and life expectancy per country',
+                          xaxis = list(type='log', title='GDP per Capita'),
+                          yaxis = list(title='Life Expectancy'))
+```
+<br>
+
+### Improvements
+<br>
+
+#### Add Country to the tooltip information
+Assign an ID to each point
+```{r message=FALSE, warning=FALSE}
+ggplotly(aggr_plot + geom_point(aes(size=pop, ids=country)))
+```
+<br>
+
+#### Add a Range Slider
+Wrap the `ggplotly instance` in `rangeslider` function
+```{r message=FALSE}
+rangeslider(ggplotly(aggr_plot))
+```
+<br>
+
+####  Add a 3rd dimension (Only with `plot_ly`)
+Assign a value to `z` in the `plot_ly` parameters
+```{r message=FALSE}
+gapminder_aggr %>% plot_ly(x = ~gdpPercap, y = ~lifeExp, z = ~continent, color = ~continent, 
+                           colors = gg_pal(5), marker = list(size=4)) %>%
+                   layout(scene = list(title = 'Mean GDP per capita and life expectancy per country',
+                                       xaxis = list(type='log', title='GDP per Capita'),
+                                       yaxis = list(title='Life Expectancy'),
+                                       zaxis = list(title='Continent')))
+```
+<br>
+Another 3D plot
+```{r message=FALSE}
+plot_ly() %>% add_surface(z = ~volcano)
+```
+<br>
+
+#### Key frame animations
+Add a frame attribute and an ID (for smooth transitions)
+```{r message=FALSE, warning=FALSE}
+yearly_plot = gapminder %>% ggplot(aes(x=gdpPercap, y=lifeExp, color=continent)) + 
+              geom_point(aes(size = pop, frame = year, ids = country)) +
+              scale_x_log10() + theme_minimal() + theme(plot.title = element_text(hjust=.5)) + 
+              ggtitle('Mean GDP per capita and life expectancy per country') + 
+              xlab('GDP per Capita') + ylab('Life Expectancy')
+ggplotly(yearly_plot)
+```
+<br>
+
+## htmlwidgets for R
+<br>
+
+From Alan O'Callaghan's [Building interactive modules using htmlwidgets](https://github.com/EdinbR/edinbr-talks/blob/master/2019-03-20/alan_ocallaghan_building_interactive_modules_using_htmlwidgets.html):
+
+A [htmlwidget](https://www.htmlwidgets.org/) is a self-contained “web app” (HTML page) accessible from the R console or within an Rmarkdown document.
+
+* Defines JavaScript and/or CSS dependencies
+
+* Defines a minimal set of functions to render and resize the widget
+
+* Takes an R list (transformed into JSON)
+
+* Renders some output in a (typically) standalone html page
+
+### [plotlyutils](https://github.com/Alanocallaghan/plotlyutils)
+
+```{r}
+library(plotlyutils)
+
+selectable_scatter_plot(gapminder_aggr, gapminder_aggr)
+```
